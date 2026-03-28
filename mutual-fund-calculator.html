@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced Mutual Fund & Compound Growth Calculator</title>
+    <meta name="description" content="Calculate your SIP and Lumpsum Mutual Fund returns with Step-up, Tax, and Inflation adjustments.">
+    
+    <!-- React & ReactDOM -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="header.css">
+    
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
+        .glass-panel { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); }
+        .slider-thumb::-webkit-slider-thumb { appearance: none; width: 20px; height: 20px; background: #4f46e5; border-radius: 50%; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <header class="app-header">
+        <div class="container">
+            <h1>Advanced Mutual Fund Calculator</h1>
+            <div class="calculator-selector">
+                <select name="calculator-options" id="calculator-options" onchange="window.location.href=this.value">
+                    <option value="mutual-fund-calculator.html" selected>Mutual Fund Calculator</option>
+                    <option value="index.html">Home Loan EMI</option>
+                    <option value="personal-loan.html">Personal Loan EMI</option>
+                    <option value="car-loan.html">Car Loan EMI</option>
+                </select>
+            </div>
+        </div>
+    </header>
+
+    <div id="root"></div>
+
+    <footer>
+        <div class="container" style="text-align:center; padding: 20px 0;">
+            <p>&copy; <span id="currentYear"></span> Financial Tools. Built for fast and aesthetic financial planning.</p>
+        </div>
+    </footer>
+
+    <script>
+        document.getElementById('currentYear').textContent = new Date().getFullYear();
+    </script>
+
+    <script>
+        window.onerror = function(msg, url, lineNo, columnNo, error) {
+            document.getElementById('root').innerHTML = '<div style="color:red; padding:20px;"><b>Error:</b> ' + msg + '<br>Line: ' + lineNo + '</div>';
+            return false;
+        };
+    </script>
+    <script type="text/babel" data-presets="react">
+        const { useState, useMemo, useEffect, useRef } = React;
+
+        const formatCurrency = (val) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(Math.round(val));
+
+        const CalculatorApp = () => {
+            const [type, setType] = useState('SIP');
+            const [amount, setAmount] = useState(10000);
+            const [returnRate, setReturnRate] = useState(12);
+            const [tenure, setTenure] = useState(10);
+            
+            // Advanced SIP toggles
+            const [stepUpEnabled, setStepUpEnabled] = useState(false);
+            const [stepUpType, setStepUpType] = useState('percentage');
+            const [stepUpValue, setStepUpValue] = useState(10);
+            
+            // Stay Invested
+            const [stayInvestedEnabled, setStayInvestedEnabled] = useState(false);
+            const [stayInvestedYears, setStayInvestedYears] = useState(5);
+            
+            // Adjustments
+            const [inflationEnabled, setInflationEnabled] = useState(false);
+            const [inflationRate, setInflationRate] = useState(6);
+            
+            const [taxEnabled, setTaxEnabled] = useState(false);
+            const [taxRate, setTaxRate] = useState(12.5);
+
+            const { chartData, metrics } = useMemo(() => {
+                let totalInvested = 0;
+                let corpus = 0;
+                let currentMonthlySip = amount;
+                
+                let data = [];
+                let totalYears = tenure;
+                if (stayInvestedEnabled) totalYears += stayInvestedYears;
+
+                const monthlyReturnRate = returnRate / 100 / 12;
+
+                for (let y = 1; y <= totalYears; y++) {
+                    let isContributingYear = y <= tenure;
+                    
+                    for (let m = 1; m <= 12; m++) {
+                        if (isContributingYear) {
+                            if (type === 'SIP') {
+                                corpus += currentMonthlySip;
+                                totalInvested += currentMonthlySip;
+                            } else if (type === 'LUMPSUM' && y === 1 && m === 1) {
+                                corpus += amount;
+                                totalInvested += amount;
+                            }
+                        }
+                        corpus = corpus * (1 + monthlyReturnRate);
+                    }
+                    
+                    if (isContributingYear && type === 'SIP' && stepUpEnabled) {
+                        if (stepUpType === 'percentage') {
+                            currentMonthlySip = currentMonthlySip * (1 + stepUpValue / 100);
+                        } else {
+                            currentMonthlySip += stepUpValue;
+                        }
+                    }
+
+                    // Calculate year-end metrics for chart
+                    let yearProfit = corpus - totalInvested;
+                    let yearTax = taxEnabled ? yearProfit * (taxRate / 100) : 0;
+                    let yearNetProfit = yearProfit - yearTax;
+                    let yearInflationLoss = 0;
+                    let netPurchasingPower = corpus;
+
+                    if (inflationEnabled) {
+                        const discountFactor = Math.pow(1 + inflationRate / 100, y);
+                        netPurchasingPower = (totalInvested + yearNetProfit) / discountFactor;
+                        yearInflationLoss = (totalInvested + yearNetProfit) - netPurchasingPower;
+                    }
+
+                    data.push({
+                        year: `Year ${y}`,
+                        Invested: Math.round(totalInvested),
+                        "Net Returns": Math.round(yearNetProfit),
+                        Tax: Math.round(yearTax),
+                        "Inflation Impact": Math.round(yearInflationLoss)
+                    });
+                }
+
+                // Final Metrics Calculation
+                const finalProfit = corpus - totalInvested;
+                const finalTax = taxEnabled ? finalProfit * (taxRate / 100) : 0;
+                let finalNetValue = corpus - finalTax;
+                let finalPurchasingPower = finalNetValue;
+                
+                if (inflationEnabled) {
+                    const discountFactor = Math.pow(1 + inflationRate / 100, totalYears);
+                    finalPurchasingPower = finalNetValue / discountFactor;
+                }
+
+                const cagr = ((Math.pow(finalNetValue / (totalInvested || 1), 1 / (totalYears || 1))) - 1) * 100;
+
+                return {
+                    chartData: data,
+                    metrics: {
+                        invested: totalInvested,
+                        profit: finalProfit,
+                        tax: finalTax,
+                        netValue: finalNetValue,
+                        purchasingPower: finalPurchasingPower,
+                        cagr: cagr
+                    }
+                };
+            }, [type, amount, returnRate, tenure, stepUpEnabled, stepUpType, stepUpValue, stayInvestedEnabled, stayInvestedYears, inflationEnabled, inflationRate, taxEnabled, taxRate]);
+
+            const chartRef = useRef(null);
+            const chartInstance = useRef(null);
+
+            useEffect(() => {
+                if (!chartRef.current) return;
+                if (chartInstance.current) {
+                    chartInstance.current.destroy();
+                }
+
+                const ctx = chartRef.current.getContext('2d');
+                chartInstance.current = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: chartData.map(d => d.year),
+                        datasets: [
+                            {
+                                label: 'Total Invested',
+                                data: chartData.map(d => d.Invested),
+                                borderColor: '#4f46e5',
+                                backgroundColor: 'rgba(79, 70, 229, 0.2)',
+                                fill: true,
+                                tension: 0.4
+                            },
+                            {
+                                label: 'Estimated Returns',
+                                data: chartData.map(d => d["Net Returns"]),
+                                borderColor: '#10b981',
+                                backgroundColor: 'rgba(16, 185, 129, 0.2)',
+                                fill: true,
+                                tension: 0.4
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        interaction: { mode: 'index', intersect: false },
+                        scales: {
+                            y: {
+                                stacked: true,
+                                ticks: { callback: (value) => '₹' + (value/100000).toFixed(1) + 'L' }
+                            }
+                        },
+                        plugins: {
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        return context.dataset.label + ': ' + formatCurrency(context.parsed.y);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+
+                if (taxEnabled) {
+                    chartInstance.current.data.datasets.push({
+                        label: 'Tax Liability',
+                        data: chartData.map(d => d.Tax),
+                        borderColor: '#f43f5e',
+                        backgroundColor: 'rgba(244, 63, 94, 0.6)',
+                        fill: true,
+                        tension: 0.4
+                    });
+                }
+                if (inflationEnabled) {
+                    chartInstance.current.data.datasets.push({
+                        label: 'Inflation Impact',
+                        data: chartData.map(d => d["Inflation Impact"]),
+                        borderColor: '#fbbf24',
+                        backgroundColor: 'rgba(251, 191, 36, 0.5)',
+                        borderDash: [5, 5],
+                        fill: true,
+                        tension: 0.4
+                    });
+                }
+                chartInstance.current.update();
+            }, [chartData, taxEnabled, inflationEnabled]);
+
+            const InputGroup = ({ label, value, onChange, min, max, step = 1, suffix = '' }) => (
+                <div className="mb-6">
+                    <div className="flex justify-between mb-2">
+                        <label className="text-sm font-semibold text-gray-700">{label}</label>
+                        <span className="text-indigo-600 font-bold">{suffix === '₹' ? formatCurrency(value) : value + suffix}</span>
+                    </div>
+                    <input 
+                        type="range" 
+                        min={min} max={max} step={step} 
+                        value={value} 
+                        onChange={(e) => onChange(parseFloat(e.target.value))}
+                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider-thumb"
+                    />
+                </div>
+            );
+
+            return (
+                <main className="container mx-auto px-4 py-8 grid grid-cols-1 lg:grid-cols-12 gap-8">
+                    {/* Left Column - Controls */}
+                    <div className="lg:col-span-4 space-y-6">
+                        <div className="glass-panel p-6 rounded-2xl shadow-lg border border-gray-100">
+                            <h2 className="text-xl font-bold text-gray-800 mb-6 border-b pb-4">Investment Strategy</h2>
+                            
+                            <div className="flex bg-gray-100 p-1 rounded-lg mb-6">
+                                <button className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${type === 'SIP' ? 'bg-indigo-600 text-white shadow' : 'text-gray-600 hover:text-gray-900'}`} onClick={() => setType('SIP')}>Monthly SIP</button>
+                                <button className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${type === 'LUMPSUM' ? 'bg-indigo-600 text-white shadow' : 'text-gray-600 hover:text-gray-900'}`} onClick={() => setType('LUMPSUM')}>One-time Lumpsum</button>
+                            </div>
+
+                            <InputGroup label={type === 'SIP' ? "Monthly Investment" : "Total Investment"} value={amount} onChange={setAmount} min={500} max={1000000} step={500} suffix="₹" />
+                            <InputGroup label="Expected Annual Return (%)" value={returnRate} onChange={setReturnRate} min={1} max={30} step={0.1} suffix="%" />
+                            <InputGroup label="Investment Tenure (Years)" value={tenure} onChange={setTenure} min={1} max={40} suffix=" Yr" />
+                            
+                            {/* Advanced Options accordion could go here, but exposing them directly feels more "Advanced" */}
+                            <div className="mt-8">
+                                <h3 className="text-md font-bold text-gray-800 mb-4">Advanced Tools</h3>
+                                
+                                {type === 'SIP' && (
+                                    <div className="bg-gray-50 p-4 rounded-xl mb-4 border border-gray-100">
+                                        <label className="flex items-center space-x-3 cursor-pointer mb-3">
+                                            <input type="checkbox" checked={stepUpEnabled} onChange={(e) => setStepUpEnabled(e.target.checked)} className="form-checkbox h-5 w-5 text-indigo-600 rounded" />
+                                            <span className="text-sm font-medium text-gray-700">Annual Step-up SIP</span>
+                                        </label>
+                                        {stepUpEnabled && (
+                                            <div className="pl-8 flex space-x-4">
+                                                <select value={stepUpType} onChange={e => setStepUpType(e.target.value)} className="text-sm border-gray-300 rounded-lg p-2 flex-1">
+                                                    <option value="percentage">% Increase</option>
+                                                    <option value="fixed">₹ Increase</option>
+                                                </select>
+                                                <input type="number" value={stepUpValue} onChange={e => setStepUpValue(parseFloat(e.target.value) || 0)} className="text-sm border-gray-300 rounded-lg p-2 w-24 text-right" />
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                <div className="bg-gray-50 p-4 rounded-xl mb-4 border border-gray-100">
+                                    <label className="flex items-center space-x-3 cursor-pointer mb-3">
+                                        <input type="checkbox" checked={stayInvestedEnabled} onChange={(e) => setStayInvestedEnabled(e.target.checked)} className="form-checkbox h-5 w-5 text-indigo-600 rounded" />
+                                        <span className="text-sm font-medium text-gray-700">Stay Invested Post-Tenure</span>
+                                    </label>
+                                    {stayInvestedEnabled && (
+                                        <div className="pl-8">
+                                            <InputGroup label="Additional Years" value={stayInvestedYears} onChange={setStayInvestedYears} min={1} max={30} suffix=" Yr" />
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="bg-gray-50 p-4 rounded-xl mb-4 border border-gray-100">
+                                    <label className="flex items-center space-x-3 cursor-pointer">
+                                        <input type="checkbox" checked={inflationEnabled} onChange={(e) => setInflationEnabled(e.target.checked)} className="form-checkbox h-5 w-5 text-indigo-600 rounded" />
+                                        <span className="text-sm font-medium text-gray-700 pl-1">Adjust for Inflation ({inflationRate}%)</span>
+                                    </label>
+                                </div>
+
+                                <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
+                                    <label className="flex items-center space-x-3 cursor-pointer">
+                                        <input type="checkbox" checked={taxEnabled} onChange={(e) => setTaxEnabled(e.target.checked)} className="form-checkbox h-5 w-5 text-indigo-600 rounded" />
+                                        <span className="text-sm font-medium text-gray-700 pl-1">Apply Tax on Profits ({taxRate}%)</span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Right Column - Visuals & Results */}
+                    <div className="lg:col-span-8 flex flex-col space-y-6">
+                        
+                        {/* Summary Cards */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div className="glass-panel p-5 rounded-2xl shadow-sm border border-gray-100">
+                                <p className="text-sm text-gray-500 font-medium mb-1">Total Invested</p>
+                                <h3 className="text-2xl font-bold text-gray-800">{formatCurrency(metrics.invested)}</h3>
+                            </div>
+                            <div className="glass-panel p-5 rounded-2xl shadow-sm border border-gray-100">
+                                <p className="text-sm text-gray-500 font-medium mb-1">Total Returns {taxEnabled && '(Post-Tax)'}</p>
+                                <h3 className="text-2xl font-bold text-green-600">{formatCurrency(metrics.netValue - metrics.invested)}</h3>
+                            </div>
+                            <div className="glass-panel p-5 rounded-2xl shadow-md border-t-4 border-indigo-600">
+                                <p className="text-sm text-gray-500 font-medium mb-1">Final Maturity Value</p>
+                                <h3 className="text-3xl font-black text-indigo-700">{formatCurrency(metrics.netValue)}</h3>
+                            </div>
+                        </div>
+
+                        {inflationEnabled && (
+                            <div className="glass-panel p-4 rounded-xl border border-orange-200 bg-orange-50 flex items-center justify-between">
+                                <div>
+                                    <p className="text-sm font-semibold text-orange-800">Purchasing Power Today</p>
+                                    <p className="text-xs text-orange-600 mt-1">Value of maturity amount adjusted for {inflationRate}% inflation.</p>
+                                </div>
+                                <h4 className="text-xl font-bold text-orange-700">{formatCurrency(metrics.purchasingPower)}</h4>
+                            </div>
+                        )}
+
+                        {/* Chart */}
+                        <div className="glass-panel p-6 rounded-2xl shadow-lg border border-gray-100 flex-1 min-h-[400px] flex flex-col">
+                            <h3 className="text-lg font-bold text-gray-800 mb-6">Wealth Accumulation Breakdown</h3>
+                            <div className="flex-1 w-full relative">
+                                <canvas ref={chartRef}></canvas>
+                            </div>
+                            
+                            <div className="mt-6 flex justify-between px-4 py-3 bg-indigo-50 rounded-xl">
+                                <span className="text-sm font-medium text-indigo-800">Effective CAGR</span>
+                                <span className="text-md font-bold text-indigo-900">{metrics.cagr.toFixed(2)}%</span>
+                            </div>
+                        </div>
+
+                    </div>
+                </main>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<CalculatorApp />);
+    </script>
+</body>
+</html>

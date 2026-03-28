@@ -28,6 +28,8 @@ document.getElementById('calculator-options').addEventListener('change', functio
         window.location.href = 'index.html';
     } else if (this.value === 'car-loan') {
         window.location.href = 'car-loan.html';
+    } else if (this.value === 'mutual-fund') {
+        window.location.href = 'mutual-fund-calculator.html';
     }
 });
 

@@ -28,6 +28,8 @@ document.getElementById('calculator-options').addEventListener('change', functio
         window.location.href = 'index.html';
     } else if (this.value === 'personal-loan') {
         window.location.href = 'personal-loan.html';
+    } else if (this.value === 'mutual-fund') {
+        window.location.href = 'mutual-fund-calculator.html';
     }
 });
 
